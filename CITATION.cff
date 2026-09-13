@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it as below.  The cubature rules
+  themselves and the method paper are separate records; cite whichever of the
+  three you used.
+title: PositiveWeightQuadratureSolvers.jl
+abstract: >-
+  Solvers for interior cubature rules with strictly positive weights for the
+  Gaussian weight N(0, I_d) on R^d and the uniform weight on [0,1]^d: the moment
+  systems, the symmetry ansaetze (B_d, D_d, S_d x Z_2, S_{d+1} x Z_2,
+  icosahedral, rotational and product orbits), free-node and pair elimination,
+  the spectral start, the degree ladder, the extended-precision polish, and the
+  verification gate.
+type: software
+authors:
+  - family-names: Pinkse
+    given-names: Joris
+    email: pinkse@gmail.com
+    affiliation: The Pennsylvania State University
+repository-code: https://github.com/NittanyLion/PositiveWeightQuadratureSolvers.jl
+license: MIT
+version: 0.1.0
+date-released: "2026-09-13"
+keywords:
+  - cubature
+  - quadrature
+  - positive weights
+  - Gauss-Hermite
+  - numerical integration
+  - Julia
+# Fill in on release: the Zenodo DOI minted from the GitHub release.
+# doi: 10.5281/zenodo.XXXXXXX
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: This release of the software.
+# Related records, to be filled in when each is public:
+#   - the rule data, one Zenodo deposit per weight family (Gaussian, uniform)
+#   - the method paper, arXiv

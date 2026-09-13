@@ -1,0 +1,41 @@
+# Designed quadrature rule — Legendre / uniform (Le) family
+# family: legendre
+# weight function: uniform on the unit cube, density 1 on [0,1]^d (Lebesgue measure, the unit cube frame of the bank)
+# normalization: total mass 1, so the weights sum to 1
+# verified: sum of weights = 1   (|sum w - 1| = 2.776e-17)
+# domain: [0,1]^d
+# d: 2   p: 5   q: 3   n: 7
+# exactness: all monomials of total degree <= p
+# verified max relative monomial error (BigFloat, 192 bits): 2.775558e-17
+# relative error definition: |sum_s w_s prod_k x_sk^a_k - E[x^a]| / max(sum_s |w_s| prod_k |x_sk|^a_k, 1)
+# project relative gate: 1.0e-11 (passed)
+# min weight: 0.097953077915250167   max weight: 0.2857142857142857   (all weights positive)
+# node range: [0.045538772522631346, 0.95446122747736861] (all nodes strictly inside the cube)
+# source file: rules/legendre_d2_p5_n7.csv   (local tree: sync)
+# source sha256: 1e1aa3173ca7d026c25d3197c99129b1bb4be9a7236614583db98563d7b36d30
+# precision shipped: Float64 round-trip (17 significant digits)
+# credit: unrecorded
+# credit note: no entry in rules/literature.tsv or rules/lineage/; the per-rule lineage ledger only starts 2026-09-10, so this rule's origin is genuinely unrecorded. No evidence for this cell in any source consulted either: no worker log naming the file, no per-host provenance index naming it (comms/provenance/, which is how the office desktop and the laptop report their own logs), no lineage entry, no cluster harvest ledger (OSPool and Roar finds ARE recorded there), no downgrade entry and no sidecar reaching this count. So this deposit does not show who made it, in either direction
+# credit evidence grade: none
+# credit evidence: no sidecar, worker-log or lineage evidence in either local tree
+# lineage parent: unrecorded
+# lineage chain root: unrecorded
+# credit vocabulary: ours | derived-from:<rule> (<paper>) | transcribed:<source> | same-rule:<source> | unrecorded
+# tie: distinct:Festa and Sommariva 2012, J. Comput. Appl. Math. 236(17), 4296-4302
+# tie note: equal count n=7, and a different rule: smr05.csv: different node set up to the cube's symmetry (tol 1e-8); Diallo and Worku, arXiv:2601.14488: published count(s) 8 for this cell, ours is 7
+# tie vocabulary: same-rule:<source> | distinct:<source> (equal count, different node set) | unestablished:<source> | no-tie | no-published-count-on-record
+# extended precision: twin-shipped
+# Float64 file origin: round-down of the extended twin (row order shared with rules_extended/); the source file above is the bank file the twin was refined from
+# extended-precision twin: rules_extended/legendre_d2_p5_q3_n7.mp.csv (80 digits, verified rel err 1.447463e-76)
+# Float64 file: round-down of the extended twin (row order shared): row i here is row i of the twin rounded to Float64
+# extended-precision source sha256: 7dd87c05aec91f210542617be755c2e884994135399b3475012baec6b59d5048
+# generated: 2026-09-13T16:04:21 by make_publish.jl
+# columns: x1,x2,w
+x1,x2,w
+0.5,0.5,0.2857142857142857
+0.29180725498277216,0.935877407369922,0.1105887594770768
+0.7081927450172278,0.06412259263007807,0.1105887594770768
+0.16534373733608831,0.1516632101067183,0.14860101975053017
+0.8346562626639117,0.8483367898932817,0.14860101975053017
+0.045538772522631346,0.6637019427285356,0.09795307791525017
+0.9544612274773686,0.3362980572714645,0.09795307791525017

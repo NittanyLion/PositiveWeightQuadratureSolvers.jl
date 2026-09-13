@@ -1,0 +1,41 @@
+# Designed quadrature rule — Gauss–Hermite (GH) family
+# family: hermite
+# weight function: standard normal N(0, I_d), density (2*pi)^(-d/2) * exp(-|x|^2 / 2) on R^d
+# normalization: probabilists' normalization: total mass 1, so the weights sum to 1
+# verified: sum of weights = 1   (|sum w - 1| = 2.776e-17)
+# domain: R^d
+# d: 2   p: 5   q: 3   n: 7
+# exactness: all monomials of total degree <= p
+# verified max relative monomial error (BigFloat, 192 bits): 1.513103e-16
+# relative error definition: |sum_s w_s prod_k x_sk^a_k - E[x^a]| / max(sum_s |w_s| prod_k |x_sk|^a_k, 1)
+# project relative gate: 1.0e-11 (passed)
+# min weight: 0.083333333333333329   max weight: 0.5   (all weights positive)
+# node range: [-1.9713852882919214, 1.9713852882919214]   max |node| = 1.9713852882919214
+# source file: rules/hermite_d2_p5_n7.csv   (local tree: sync)
+# source sha256: f00a39474ffad1521527e385f34ecf053454eb159dd040046b969244e7827f9a
+# precision shipped: Float64 round-trip (17 significant digits)
+# credit: same-rule:Stroud 1971, E_2^{r^2}:5-4 (identified 2026-09-11; same up to rotation, which the Gaussian weight permits)
+# credit note: our search converged to a rule identical to this published one; the rule is theirs, cite them
+# credit evidence grade: none
+# credit evidence: no sidecar, worker-log or lineage evidence in either local tree
+# lineage parent: -
+# lineage chain root: -
+# credit vocabulary: ours | derived-from:<rule> (<paper>) | transcribed:<source> | same-rule:<source> | unrecorded
+# tie: same-rule:Stroud 1971, E_2^{r^2}:5-4 (identified 2026-09-11; same up to rotation, which the Gaussian weight permits)
+# tie note: our bank file IS this published rule (rules/literature.tsv), confirmed here against en_r2_05_4_n2_o1.csv
+# tie vocabulary: same-rule:<source> | distinct:<source> (equal count, different node set) | unestablished:<source> | no-tie | no-published-count-on-record
+# extended precision: twin-shipped
+# Float64 file origin: round-down of the extended twin (row order shared with rules_extended/); the source file above is the bank file the twin was refined from
+# extended-precision twin: rules_extended/hermite_d2_p5_q3_n7.mp.csv (40 digits, verified rel err 8.746166e-40)
+# Float64 file: round-down of the extended twin (row order shared): row i here is row i of the twin rounded to Float64
+# extended-precision source sha256: 99c4c60796bed7f09a74dc62dc94c0e61f99bda68b48807c0aab1424035873ac
+# generated: 2026-09-13T14:38:11 by make_publish.jl
+# columns: x1,x2,w
+x1,x2,w
+-1.2776344771018318,-1.5387170444629283,0.08333333333333333
+1.2776344771018318,1.5387170444629283,0.08333333333333333
+-0.6937508111900896,1.875822436152498,0.08333333333333333
+0.6937508111900896,-1.875822436152498,0.08333333333333333
+-1.9713852882919214,0.33710539168956977,0.08333333333333333
+1.9713852882919214,-0.33710539168956977,0.08333333333333333
+0.0,0.0,0.5

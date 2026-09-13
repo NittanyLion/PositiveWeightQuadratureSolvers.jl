@@ -1,0 +1,14 @@
+/Manifest.toml
+/Manifest-v*.toml
+/docs/Manifest.toml
+/docs/build/
+/LocalPreferences.toml
+
+# search output: a run's bank, sidecars and logs never belong in the repository
+/rules/
+/rules_mp/
+/rules_extended/
+/symq/
+/comms/
+/run/
+*.log
