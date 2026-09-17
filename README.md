@@ -151,7 +151,7 @@ julia --project=. scripts/symq_run.jl 2 5 1 1          # 1 minute, seed 1
 | `symq_rot2.jl` | D_k rotational-orbit search for GH d = 2 (§32) |
 | `symq_enum.jl <d> <p> …` | deterministic enumeration of B_d orbit structures — certifies a floor for the ansatz rather than searching (§5) |
 | `spectral_start.jl` | spectral initialization, then elimination |
-| `update_legendre.jl` | pair elimination for the uniform weight, with a staging directory; promotes staged rules at the start of every run (§17) |
+| `update_legendre.jl <d> <p> [seed]` | pair elimination for the uniform weight, with a staging directory; promotes staged rules at the start of every run (§17). For the big cells (d = 5, p ≥ 17; §36) it takes `SYMQ_BLAS_THREADS` (default 1), `SYMQ_PAIR_LADDER` (start sizes as multiples of the pair floor, default `1.20,1.45,1.75,2.10`), `SYMQ_PAIR_BATCH` (pairs dropped per step, halved on failure), `SYMQ_PAIR_WARM=1` (continue from the banked rule) and `SYMQ_PAIR_RNGOFF`; it checkpoints inside a solve and resumes, and `--promote-only` may run beside a live eliminator |
 | `dw_warm.jl` | warm start from a *published* rule (pair elimination from someone else's node set). Every rule it banks gets a lineage line, and the paper marks such a rule as derived — see "Credit" below (§28.2, §28.5) |
 | `tensor_fill.jl <family…>` | tensor products of Gauss rules, as a warm start and as a fallback count for an empty cell (tag `T`) |
 | `monotone_bank.jl [--dry] [family…]` | a degree-(p+2) rule *is* a degree-p rule: copies the smaller one down whenever a column is not monotone, and ledgers the copy (§27) |

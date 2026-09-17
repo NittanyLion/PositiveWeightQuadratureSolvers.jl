@@ -152,6 +152,35 @@ function rung_laguerre(p)
     return best
 end
 
+# --- staged sizes → bank (2026-09-13) --------------------------------------
+# node_elimination stages every size it reaches, but they used to be banked only
+# when the elimination returned, so a rung killed by its `timeout` or by
+# symq_stop.sh lost all of them — and the GH d3 rungs run longer than any
+# timeout.  Called at the end of a rung and again before each pass, so a killed
+# rung's sizes reach the bank at the next launch.  Same gate as before; a file
+# that cannot be read (another seat still writing it) is left for later.
+function promote_stage(p)
+    basis === :laguerre && return
+    stage = joinpath(SYMQ, "ladder_stage")
+    isdir(stage) || return
+    for f in sort(readdir(stage))
+        m = match(Regex("^$(PFX)_d$(d)_p$(p)_n(\\d+)\\.csv\$"), f)
+        m === nothing && continue
+        try
+            nd, wd = load_rule(joinpath(stage, f))
+            nd, wd = dedupe(nd, wd)
+            nn = length(wd)
+            ex = verify_exactness(nd, wd, p; basis, relative = true)
+            ok = ex <= EXTOL && minimum(wd) > 0 && abs(sum(wd) - 1) <= 1e-10 &&
+                 (basis !== :legendre || all(0 <= x <= 1 for x in nd))
+            ok && nn < bank_best(p) && write_rule(p, nd, wd, ex)
+            rm(joinpath(stage, f); force = true)
+        catch e
+            println(logio, "stage file $f not promoted ($(sprint(showerror, e)))")
+        end
+    end
+end
+
 # --- hermite / legendre rung: V2 degree continuation + elimination --------
 n_even(p) = sum(binomial(s + d - 1, d - 1) for s in 0:2:p)
 
@@ -204,18 +233,7 @@ function rung_v2(p)
                      init_pairs = r.pairs, rng,
                      save_prefix = joinpath(stage, "$(PFX)_d$(d)_p$(p)"),
                      tag = "ladder d$d p$p")
-    for f in sort(readdir(stage))
-        m = match(Regex("^$(PFX)_d$(d)_p$(p)_n(\\d+)\\.csv\$"), f)
-        m === nothing && continue
-        nd, wd = load_rule(joinpath(stage, f))
-        nd, wd = dedupe(nd, wd)
-        nn = length(wd)
-        ex = verify_exactness(nd, wd, p; basis, relative = true)
-        ok = ex <= EXTOL && minimum(wd) > 0 && abs(sum(wd) - 1) <= 1e-10 &&
-             (basis !== :legendre || all(0 <= x <= 1 for x in nd))
-        ok && nn < bank_best(p) && write_rule(p, nd, wd, ex)
-        rm(joinpath(stage, f); force = true)
-    end
+    promote_stage(p)
     write(prog, "d=$d p=$p LADDER  best $(bank_best(p))  (rung done)\n")
 end
 
@@ -285,6 +303,7 @@ end
 
 led = read_ledger()
 for p in pfirst:2:pend
+    promote_stage(p)                         # a killed earlier rung's sizes (2026-09-13)
     go, why = should_run(p, led)
     if !go
         _, _, sk = get(led, p, (bank_best(p), donor_best(p), 0))

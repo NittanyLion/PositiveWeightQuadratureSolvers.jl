@@ -42,6 +42,10 @@ using ..DesignedQuadrature: total_degree_indices, poly_tables!, moment_block!, n
                             node_box_penalty, lhsdesign, norminvcdf,
                             verify_exactness, save_rule, load_rule
 
+# polish: systems with at least this many unknowns try the dual-Cholesky
+# Newton steps before any SVD (2026-09-17; SYMQ_BIG_POLISH_N overrides)
+const BIG_POLISH_N = parse(Int, get(ENV, "SYMQ_BIG_POLISH_N", "12000"))
+
 export designed_quadrature_v2, node_elimination, degree_continuation,
        verify_exactness, save_rule, load_rule, save_pairs, load_pairs
 
@@ -129,6 +133,8 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
                                 polish::Bool = true,
                                 stopflag::Union{Nothing,Threads.Atomic{Bool}} = nothing,
                                 progress_file::Union{Nothing,String} = nothing,
+                                checkpoint_file::Union{Nothing,String} = nothing,
+                                checkpoint_secs::Float64 = 600.0,
                                 symmetric::Bool = true,
                                 scale::Bool = get(ENV, "SYMQ_LM_SCALE", "1") ≠ "0",
                                 polish_gate::Float64 = 1e-12,
@@ -240,6 +246,7 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
     δ = eval_full!()
     δbest = δ
     since_improve = 0
+    t_ckpt = time()
     λ = lambda0 * maximum(sum(abs2, J, dims = 1))
     ν = 2.0
     iters = 0
@@ -293,7 +300,18 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
         σ = linsolve === :svd ? F.S : Float64[]
         linsolve === :qr && (@views Aq[1:M, :] .= J)
         linsolve === :dual && mul!(G, J, J')   # reused across all λ trials
-        linsolve === :chol && mul!(H, J', J)   # reused across all λ trials
+        # JᵀJ, reused across all λ trials.  Upper triangle only (all that
+        # cholesky!(Symmetric(Hλ)) reads), by syrk on the moment rows; each
+        # box/orthant penalty row holds a single entry, in column row − n_terms,
+        # so its contribution is one diagonal term.  2026-09-17: against the
+        # dense mul!(H, J', J) this is ≈ 4× fewer flops on a Le pair system,
+        # where the penalty rows are half of M (d5 p21: 1.5e14 → 3.7e13).
+        if linsolve === :chol
+            @views BLAS.syrk!('U', 'T', 1.0, J[1:n_terms, :], 0.0, H)
+            @inbounds for c in 1:n_cons
+                H[c, c] += J[n_terms + c, c]^2
+            end
+        end
 
         # damped least-squares solve: dst .= -(JᵀJ+λI)⁻¹ Jᵀ rhs
         # The dual identity (JᵀJ+λI)⁻¹Jᵀ = Jᵀ(JJᵀ+λI)⁻¹ is exact, not an
@@ -443,6 +461,15 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
         if progress_file !== nothing && iters % 10 == 0
             open(io -> println(io, iters, " ", δbest), progress_file, "w")
         end
+        # In-solve checkpoint (2026-09-17): the d5 p17 pair solve was killed
+        # before its first convergence on every attempt since 09-05, and lost
+        # everything each time.  Written to a temporary and renamed, so a kill
+        # mid-write leaves the previous checkpoint intact.
+        if checkpoint_file !== nothing && time() - t_ckpt ≥ checkpoint_secs
+            save_pairs(checkpoint_file * ".tmp", (b, w))
+            mv(checkpoint_file * ".tmp", checkpoint_file; force = true)
+            t_ckpt = time()
+        end
         verbose && iters % 25 == 0 && println("  iter $iters:  ‖R‖ = $δ  λ = $λ")
     end
 
@@ -456,17 +483,87 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
         bbest = copy(b); ubest = copy(u); δpol = δ
         cutfacs = (1e-10, 1e-12, 1e-14)
         ci = 1
+        # 2026-09-17, for the d5 p17–p21 pair systems (N = 14k–35k), where this
+        # loop — not the LM iterations — was most of an elimination step:
+        #  · the normal-equation work arrays are dead from here on; release them
+        #    before the factorizations below need the memory;
+        #  · a rejected step leaves (b, u), hence J and R, where they were, so the
+        #    retry at the next cutoff REUSES the factorization instead of
+        #    recomputing an identical SVD (same numbers, up to three SVDs fewer
+        #    per solve, at every size);
+        #  · with no box/orthant penalty active the penalty rows of J and R are
+        #    exactly zero, and the SVD of the moment block alone is the same
+        #    minimum-norm step at half the rows (Le: M = 2·n_terms);
+        #  · N ≥ BIG_POLISH_N only: try Tikhonov–Newton steps through the dual
+        #    Cholesky of J Jᵀ + εI first (one syrk + one n_terms² Cholesky, ~10×
+        #    cheaper than the SVD and n_terms² memory); steps are kept only while
+        #    they at least halve ‖R‖, and the SVD path below finishes the job
+        #    unless the cheap one already sits on the floor.
+        if N ≥ BIG_POLISH_N
+            H = zeros(0, 0); Hλ = zeros(0, 0); G = zeros(0, 0); Gλ = zeros(0, 0)
+            Aq = zeros(0, 0); GC.gc()
+            Gp = zeros(n_terms, n_terms)
+            for _ in 1:40
+                eval_full!()
+                (n_cons > 0 && any(!iszero, @view R[n_terms+1:M])) && break
+                @views BLAS.syrk!('U', 'N', 1.0, J[1:n_terms, :], 0.0, Gp)
+                ε = 1e-11 * maximum(Gp[i, i] for i in 1:n_terms)
+                @inbounds for i in 1:n_terms
+                    Gp[i, i] += ε
+                end
+                Fc = try
+                    cholesky!(Symmetric(Gp))
+                catch e
+                    e isa LinearAlgebra.PosDefException || rethrow()
+                    break
+                end
+                @views dxp = J[1:n_terms, :]' * (Fc \ R[1:n_terms])
+                @views begin
+                    b .-= reshape(dxp[1:d*n_s], n_s, d)
+                    u .-= dxp[d*n_s+1:end]
+                end
+                w .= exp.(u)
+                δnew = eval_resid!(Rt, Rtmom, Tt, b, w)
+                if δnew < 0.5 * δpol
+                    δpol = δnew
+                    bbest .= b; ubest .= u
+                    iters += 1
+                else
+                    δnew < δpol && (δpol = δnew; bbest .= b; ubest .= u)
+                    b .= bbest; u .= ubest; w .= exp.(u)
+                    break
+                end
+            end
+            Gp = zeros(0, 0); GC.gc()
+        end
+        # big systems skip the SVD path when the cheap steps already put the RULE
+        # through the bank's relative gate with a decade to spare — the gate, not
+        # ‖R‖, is what the bank accepts (p21: one SVD is ~70 G and half an hour)
+        big_done = false
+        if N ≥ BIG_POLISH_N
+            wb = exp.(ubest)
+            bx = symmetric ? vcat(bbest, .-bbest) : bbest
+            wx = symmetric ? vcat(wb ./ 2, wb ./ 2) : wb
+            big_done = verify_exactness(basis === :legendre ? bx ./ 2 .+ 0.5 : bx, wx, p;
+                                        basis = basis, relative = true) ≤ polish_gate
+        end
+        Fp = nothing; UtRp = Float64[]
         for _ in 1:40
-            eval_full!()
-            Fp = try
-                svd(J)
-            catch e
-                e isa LinearAlgebra.LAPACKException || rethrow()
-                break
+            big_done && break
+            if Fp === nothing
+                eval_full!()
+                pen_on = n_cons > 0 && any(!iszero, @view R[n_terms+1:M])
+                Fp = try
+                    pen_on ? svd(J) : svd!(J[1:n_terms, :])
+                catch e
+                    e isa LinearAlgebra.LAPACKException || rethrow()
+                    break
+                end
+                UtRp = pen_on ? Fp.U' * R : Fp.U' * view(R, 1:n_terms)
             end
             thresh = cutfacs[ci] * Fp.S[1]
             dxp = Fp.V * [σi > thresh ? ui / σi : 0.0
-                          for (ui, σi) in zip(Fp.U' * R, Fp.S)]
+                          for (ui, σi) in zip(UtRp, Fp.S)]
             @views begin
                 b .-= reshape(dxp[1:d*n_s], n_s, d)
                 u .-= dxp[d*n_s+1:end]
@@ -477,13 +574,15 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
                 δpol = δnew
                 bbest .= b; ubest .= u
                 iters += 1
+                Fp = nothing                  # moved: factor afresh
                 δnew ≤ 1e-15 && break
             else
                 b .= bbest; u .= ubest; w .= exp.(u)
-                ci += 1
+                ci += 1                       # same point: keep Fp, tighter cutoff
                 ci > length(cutfacs) && break
             end
         end
+        Fp = nothing
         b .= bbest; u .= ubest; w .= exp.(u)
         δ = δpol
     end
@@ -502,7 +601,9 @@ function designed_quadrature_v2(d::Int, p::Int, n_s::Int;
     # the one with the best gate, and it never returns a worse gate than it was given.
     # Scaling the main LM loop the same way was tried and rejected: cold
     # symmetric solves went from 16/16 to 0–2/16 (scratchpad/v2scaled/regress.jl).
-    if polish && scale && δ < 1e-6
+    # (not at N ≥ BIG_POLISH_N: its full-J SVD is the 100 GB object the polish
+    #  above was rewritten to avoid, and Le rules do not need it)
+    if polish && scale && δ < 1e-6 && N < BIG_POLISH_N
         rule_gate = function (bb, ww)
             bx = symmetric ? vcat(bb, .-bb) : bb
             wx = symmetric ? vcat(ww ./ 2, ww ./ 2) : ww
@@ -608,6 +709,7 @@ function node_elimination(d::Int, p::Int;
                           save_prefix::Union{Nothing,String} = nothing,
                           progress_file::Union{Nothing,String} = nothing,
                           init_pairs::Union{Nothing,Tuple} = nothing,
+                          checkpoint_file::Union{Nothing,String} = nothing,
                           tag::String = "elim",
                           log_io::IO = stdout)
     t0 = time()
@@ -616,9 +718,19 @@ function node_elimination(d::Int, p::Int;
     # match their count) — e.g. a quantile-transformed rule of another weight
     init_pairs === nothing || length(init_pairs[2]) == m_start ||
         throw(ArgumentError("init_pairs has $(length(init_pairs[2])) pairs, m_start=$m_start"))
+    # Resume the first solve from its own checkpoint (2026-09-17) when one of
+    # the right size is on disk; the file name carries cell, size and seed.
+    if checkpoint_file !== nothing && isfile(checkpoint_file)
+        ck = try load_pairs(checkpoint_file) catch; nothing end
+        if ck !== nothing && length(ck[2]) == m_start && all(isfinite, ck[1]) && all(>(0), ck[2])
+            init_pairs = ck
+            println(log_io, "$tag: resuming the m=$m_start solve from $(basename(checkpoint_file))")
+            flush(log_io)
+        end
+    end
     r = designed_quadrature_v2(d, p, m_start; basis, symmetric, rng, tol,
                                maxiter = maxiter_first, stall_window = stall_first,
-                               init_pairs, progress_file)
+                               init_pairs, progress_file, checkpoint_file)
     if !r.converged
         println(log_io, "$tag: initial solve at m=$m_start FAILED " *
                         "(status=$(r.status), ‖R‖=$(r.residual), $(round(Int, time()-t0))s)")

@@ -39,7 +39,13 @@ try include(joinpath(@__DIR__, "symq_lineage.jl")) catch end
 # each worker spins up a full OpenBLAS pool: measured 2026-09-09 at home, five
 # unpinned workers ran at 650-770% CPU each (~35 of 64 cores) and starved
 # every single-threaded worker on the box to ~40% of a core, Tctl 83°C.
-BLAS.set_num_threads(1)
+#
+# SYMQ_BLAS_THREADS (2026-09-17) lifts the pin for a DEDICATED big-cell run: the
+# d5 p17/p19/p21 pair systems are 14k–35k unknowns, one LM iteration is a dense
+# syrk + Cholesky of that order, and on one thread the first solve never
+# finished (d5 p17: killed before convergence on every attempt since 09-05).
+# Never set it on a seat that shares a machine with other workers.
+BLAS.set_num_threads(parse(Int, get(ENV, "SYMQ_BLAS_THREADS", "1")))
 
 const J     = get(ENV, "SYMQ_ROOT", pwd())
 # Test hooks, matching symq_lag.jl / symq_ladder.jl / symq_freeelim.jl
@@ -141,6 +147,9 @@ function promote_staged(n_cut; parent = "none",
         m === nothing && continue
         n = parse(Int, m.captures[1])
         src = joinpath(STAGE, f)
+        # a --promote-only pass may run BESIDE a live eliminator (pairbig.sh,
+        # 2026-09-17): leave a file that may still be being written
+        PROMOTE_ONLY && time() - mtime(src) < 120 && continue
         if n >= n_cut                        # not better than what the bank holds
             rm(src; force = true); continue
         end
@@ -215,7 +224,21 @@ prefix = joinpath(STAGE, "legendre_d$(d)_p$(p)")
 # 1612 and spent the night walking back down.  Anchoring on the floor puts the
 # first solve BELOW the incumbent, where elimination has somewhere to go; every
 # rung is capped at m_have - 1 so no rung can start at or above the bank.
-const LADDER = (1.20, 1.45, 1.75, 2.10)
+# SYMQ_PAIR_LADDER="1.10,1.20" overrides the factors (2026-09-17), so that seats
+# on different machines can probe different start sizes of one cell instead of
+# repeating each other; SYMQ_PAIR_BATCH is node_elimination's batch0 (lightest
+# pairs dropped per step, halved on failure); SYMQ_PAIR_WARM=1 skips the cold
+# ladder when the bank already sits at or below its first rung — a restarted
+# run then continues from the banked rule instead of cold-starting one pair
+# below it and discarding the incumbent.
+const LADDER = haskey(ENV, "SYMQ_PAIR_LADDER") ?
+    Tuple(parse.(Float64, split(ENV["SYMQ_PAIR_LADDER"], ","))) : (1.20, 1.45, 1.75, 2.10)
+# SYMQ_PAIR_RNGOFF: a different random stream for the same seed (the OSPool
+# pairbig jobs, whose seed names their ladder).
+const RNGOFF = parse(Int, get(ENV, "SYMQ_PAIR_RNGOFF", "0"))
+const BATCH0 = parse(Int, get(ENV, "SYMQ_PAIR_BATCH", "1"))
+const WARM_FIRST = get(ENV, "SYMQ_PAIR_WARM", "0") == "1" && m_have != typemax(Int) &&
+                   m_have ≤ ceil(Int, m_floor * LADDER[1])
 rungs = Int[]
 for fac in LADDER
     m = ceil(Int, m_floor * fac)
@@ -231,14 +254,24 @@ flush(stdout)   # this worker is designed to run under `timeout`; an unflushed
                 # header means a killed run loses its own configuration line
 
 solved = false
-for (k, m) in enumerate(rungs)
+WARM_FIRST && println("bank (m=$m_have pairs) is at or below the first rung — straight to the warm start")
+for (k, m) in enumerate(WARM_FIRST ? Int[] : rungs)
+    ckpt = joinpath(STAGE, "ckpt_legendre_d$(d)_p$(p)_m$(m)_s$(SEED).csv")
+    # a rung that stalled stays stalled: a restarted seat (an OSPool slice, a
+    # chained Roar job) must not resume its checkpoint and sit out the stall
+    # window again.  The marker is a .csv so the OSPool wrapper carries it.
+    failed = joinpath(STAGE, "ckptfail_legendre_d$(d)_p$(p)_m$(m)_s$(SEED).csv")
+    isfile(failed) && (println("start m=$m failed in an earlier run — skipping"); continue)
     r = node_elimination(d, p; basis = :legendre, symmetric = true,
-                         m_start = m, save_prefix = prefix,
-                         tag = "legendre d$d p$p", rng = Xoshiro(SEED + k))
+                         m_start = m, save_prefix = prefix, batch0 = BATCH0,
+                         checkpoint_file = ckpt,
+                         progress_file = joinpath(STAGE, "prog_pair_d$(d)_p$(p)_s$(SEED).txt"),
+                         tag = "legendre d$d p$p", rng = Xoshiro(SEED + k + RNGOFF))
     if r !== nothing
         global solved = true
         break
     end
+    rm(ckpt; force = true); write(failed, "stalled\n")
     println("start m=$m did not converge — climbing the ladder"); flush(stdout)
 end
 
@@ -252,11 +285,13 @@ if !solved && m_have != typemax(Int)
     try
         X, wv = load_rule(bankfile)
         b0, w0 = pairs_from_rule(2 .* X .- 1, wv)      # bank is [0,1], solver [-1,1]
-        keep = sortperm(w0)[2:end]                     # drop the lightest pair
+        keep = sortperm(w0)[(BATCH0 + 1):end]          # drop the lightest pair(s)
         println("cold ladder exhausted — warm starting from the bank at m=$(length(keep)) pairs")
         LIN_PARENT[] = basename(bankfile)     # what this run's rules descend from
         r = node_elimination(d, p; basis = :legendre, symmetric = true,
                              m_start = length(keep), init_pairs = (b0[keep, :], w0[keep]),
+                             batch0 = BATCH0,
+                             progress_file = joinpath(STAGE, "prog_pair_d$(d)_p$(p)_s$(SEED).txt"),
                              save_prefix = prefix, tag = "legendre d$d p$p warm",
                              rng = Xoshiro(SEED + 100))
         r === nothing && println("warm start did not converge either")
