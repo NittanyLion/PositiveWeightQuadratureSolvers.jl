@@ -54,7 +54,8 @@ setprecision(BigFloat, 384)
 const TNAME  = argval("--type", FAM == "legendre" ? "big" : "x4")
 const T      = TNAME == "big" ? BigFloat : Float64x4
 const TARGET = parse(Float64, argval("--target", FAM == "legendre" ? "1e-68" : "1e-34"))
-const DIGITS = FAM == "legendre" ? 80 : 40
+# --digits (2026-09-20): 80 for a Gaussian rule needs --type big --target 1e-68 with it
+const DIGITS = parse(Int, argval("--digits", FAM == "legendre" ? "80" : "40"))
 optval(flag, env, default) = argval(flag, get(ENV, env, default))
 const MAXIT  = parse(Int, optval("--maxit", "POLISH_MP_MAXIT", "10"))
 const SVDCUT = parse(Float64, optval("--svdcut", "POLISH_MP_SVDCUT", "1e-13"))
@@ -127,16 +128,34 @@ if memgb > MEMCAP
     exit(2)
 end
 
+# --start <twin.mp.csv> (2026-09-20): begin from an existing extended-precision twin of THIS
+# bank file instead of from its Float64 rounding.  A Gaussian rule can be rotated, so the
+# solutions form a manifold; a polish restarted from the rounded file converges to a point
+# ~1e-16 (up to 6e-12, GH d3 p31) away from the twin's, and its Float64 rounding then differs
+# from the bank file in hundreds of entries.  Started from the 40-digit twin the step is ~1e-35
+# and the rounding — hence the bank file and the Float64 deposit — is unchanged.
+const START = argval("--start", "")
+const XSTART, WSTART = if START == ""
+    (nothing, nothing)
+else
+    srows = [split(l, ",") for l in eachline(START) if !startswith(l, "#") && !isempty(strip(l)) && !startswith(l, "x")]
+    length(srows) == n || error("--start has $(length(srows)) rows, the bank file has $n")
+    Xs = [parse(BigFloat, rw[k]) for rw in srows, k in 1:D]; ws = [parse(BigFloat, rw[D+1]) for rw in srows]
+    maximum(abs.(Float64.(Xs) .- X64)) < 1e-9 || error("--start is not the rule in the bank file (row order or values differ)")
+    (FAM == "legendre" ? 2 .* Xs .- 1 : Xs, ws)
+end
+xstart(S, s) = XSTART === nothing ? S.(Tsol[s, :]) : S.(XSTART[s, :])
+wstart(S, s) = WSTART === nothing ? S(w64[s]) : S(WSTART[s])
 function start_params(S)
     Xr = zeros(S, NR, D); wr = zeros(S, NR)
     for (j, s) in enumerate(reps)
         if iscenter[j] || !SYM
-            iscenter[j] || (Xr[j, :] .= S.(Tsol[s, :]))
-            wr[j] = S(w64[s])
+            iscenter[j] || (Xr[j, :] .= xstart(S, s))
+            wr[j] = wstart(S, s)
         else
             s2 = partner[s]
-            Xr[j, :] .= (S.(Tsol[s, :]) .- S.(Tsol[s2, :])) ./ 2
-            wr[j] = S(w64[s]) + S(w64[s2])
+            Xr[j, :] .= (xstart(S, s) .- xstart(S, s2)) ./ 2
+            wr[j] = wstart(S, s) + wstart(S, s2)
         end
     end
     Xr, log.(wr)
@@ -180,20 +199,24 @@ function resid(X::AbstractMatrix{S}, u; jac = false) where S
 end
 
 # --- expanded rule in the bank frame, and the relative gate in type S ----------
+# Rows come out in the BANK FILE's order (2026-09-20).  Until then a ±pair-reduced rule was
+# written in pair order (node, antipode, …), which is the bank's order only when the bank file
+# was itself rewritten from such a twin; GH d2 p29 n153, whose 40-digit twin was made
+# "unreduced", came back from the 80-digit run as the same 153 rows permuted.
 function expand(X, u, S)
-    rows = Vector{Vector{S}}(); ws = S[]
-    for j in 1:NR
+    Xe = zeros(S, n, D); ws = zeros(S, n)
+    for (j, s) in enumerate(reps)
         wj = exp(S(u[j]))
         if !SYM
-            push!(rows, S.(X[j, :])); push!(ws, wj)
+            Xe[s, :] .= S.(X[j, :]); ws[s] = wj
         elseif iscenter[j]
-            push!(rows, zeros(S, D)); push!(ws, wj)
+            ws[s] = wj                                   # the center node: coordinates stay zero
         else
-            push!(rows, S.(X[j, :])); push!(ws, wj / 2)
-            push!(rows, -S.(X[j, :])); push!(ws, wj / 2)
+            s2 = partner[s]
+            Xe[s, :] .= S.(X[j, :]);  ws[s] = wj / 2
+            Xe[s2, :] .= -S.(X[j, :]); ws[s2] = wj / 2
         end
     end
-    Xe = permutedims(reduce(hcat, rows))
     FAM == "legendre" ? (Xe .+ 1) ./ 2 : Xe, ws
 end
 dfact(k, S) = (r = one(S); for j in 1:2:(k-1); r *= j; end; r)

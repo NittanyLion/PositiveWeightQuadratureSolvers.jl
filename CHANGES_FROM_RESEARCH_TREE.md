@@ -42,7 +42,9 @@ about how a driver reads or writes the bank changed.
 | `compare_rules.jl` | `const ROOT = "/dropbox/Dropbox/oldDesignedQuadrature-sync"` → `get(ENV, "PWQS_RESEARCH_ROOT", pwd())`; `RULES` now also honors `SYMQ_RULES_DIR`. The competitor node files it reads (`litcheck/festa_sommariva`, `litcheck/stroud_m`, `symq/vz_rules`, `xg_cube_p7_n26.csv`) are **not** shipped — see the README. |
 | `dw_warm.jl` | 2 module includes; `const J` |
 | `monotone_bank.jl` | `const J = @__DIR__` → `get(ENV, "SYMQ_ROOT", pwd())` (same reason as `classify_methods.jl`) |
-| `polish_mp.jl` | `const JL = @__DIR__` → `joinpath(@__DIR__, "..", "src")`, which is what its one `include(joinpath(JL, "DesignedQuadrature.jl"))` needs |
+| `polish_mp.jl` | `const JL = @__DIR__` → `joinpath(@__DIR__, "..", "src")`, which is what its one `include(joinpath(JL, "DesignedQuadrature.jl"))` needs. Synced 2026-09-20: `--digits`, `--start`, rows written in bank order |
+| `polish_sym.jl` | added 2026-09-20; the default of `POLISH_SYM_JL` is `joinpath(@__DIR__, "..", "src")` instead of `@__DIR__` |
+| `polish_lm_big.jl` | added 2026-09-20; `const JL = @__DIR__` → `joinpath(@__DIR__, "..", "src")` |
 | `spectral_start.jl` | 3 module includes; `const J`; ENV override added for `RULES` |
 | `symq_enum.jl` | 2 module includes; `const J`; `COMMS`; ENV overrides added for `RULES`, `SYMQ` |
 | `symq_freeelim.jl` | 2 module includes; `const J` |
