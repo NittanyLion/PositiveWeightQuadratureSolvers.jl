@@ -35,5 +35,6 @@ keywords:
 #     value: 10.5281/zenodo.XXXXXXX
 #     description: This release of the software.
 # Related records, to be filled in when each is public:
-#   - the rule data, one Zenodo deposit per weight family (Gaussian, uniform)
+#   - the rule data: Zenodo, doi 10.5281/zenodo.22881864 (reserved 2026-09-21; one record holding
+#     one deposit per weight family, Gaussian and uniform)
 #   - the method paper, arXiv

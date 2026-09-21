@@ -22,7 +22,7 @@ where ρ = 1 is a Gauss product grid of the same degree and smaller is better.
 
 | part | where |
 | --- | --- |
-| **the rules** — node/weight data, per-cell metadata, extended-precision twins, checksums | Zenodo, one deposit per weight family (`publish/gh`, `publish/le` in the research tree) |
+| **the rules** — node/weight data, per-cell metadata, extended-precision twins, checksums | Zenodo, DOI [10.5281/zenodo.22881864](https://doi.org/10.5281/zenodo.22881864): one record holding one deposit per weight family (`publish/gh`, `publish/le` in the research tree) |
 | **the method** — what the ansätze are, why each exists, what was measured | the arXiv paper |
 | **the code** — this repository, with a DOI minted from a GitHub release | here |
 
@@ -221,8 +221,9 @@ that the module wiring and the orbit-search aliases resolve.
 
 ## Citation
 
-See `CITATION.cff`. The rule data has its own Zenodo DOI per weight family, and
-the method its own arXiv identifier; cite whichever you used.
+See `CITATION.cff`. The rule data has its own Zenodo DOI, [10.5281/zenodo.22881864](https://doi.org/10.5281/zenodo.22881864)
+(one record for both weight families; reserved, it resolves once the record is
+published), and the method its own arXiv identifier; cite whichever you used.
 
 ## License
 
