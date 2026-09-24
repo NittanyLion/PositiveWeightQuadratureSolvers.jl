@@ -40,7 +40,12 @@ references:
     title: Positive weight Hermite and Legendre quadrature rules
     year: 2026
     doi: 10.5281/zenodo.22904159
-    notes: The method paper.
+    url: https://arxiv.org/abs/2609.26840
+    identifiers:
+      - type: other
+        value: arXiv:2609.26840
+        description: The arXiv preprint of the paper.
+    notes: The method paper, arXiv:2609.26840.
   - type: data
     authors:
       - family-names: Pinkse

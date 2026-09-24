@@ -23,7 +23,7 @@ where ρ = 1 is a Gauss product grid of the same degree and smaller is better.
 | part | where |
 | --- | --- |
 | **the rules** — node/weight data, per-cell metadata, extended-precision twins, checksums | Zenodo, DOI [10.5281/zenodo.22881864](https://doi.org/10.5281/zenodo.22881864): one record holding one deposit per weight family (`publish/gh`, `publish/le` in the research tree) |
-| **the method** — what the ansätze are, why each exists, what was measured | Zenodo, DOI [10.5281/zenodo.22904159](https://doi.org/10.5281/zenodo.22904159) |
+| **the method** — what the ansätze are, why each exists, what was measured | the paper, [arXiv:2609.26840](https://arxiv.org/abs/2609.26840); Zenodo, DOI [10.5281/zenodo.22904159](https://doi.org/10.5281/zenodo.22904159) |
 | **the code** — this repository | here; v0.1.0 is archived with the four companion packages at Zenodo, DOI [10.5281/zenodo.22883240](https://doi.org/10.5281/zenodo.22883240) |
 
 The deposits are self-contained: each ships `rules/`, `rules_extended/`,
@@ -222,7 +222,8 @@ that the module wiring and the orbit-search aliases resolve.
 ## Citation
 
 See `CITATION.cff`. The rule data has its own Zenodo DOI, [10.5281/zenodo.22881864](https://doi.org/10.5281/zenodo.22881864)
-(one record for both weight families), and the paper its own,
+(one record for both weight families), and the paper is on arXiv,
+[arXiv:2609.26840](https://arxiv.org/abs/2609.26840), with its own Zenodo DOI,
 [10.5281/zenodo.22904159](https://doi.org/10.5281/zenodo.22904159); cite whichever you used.
 
 ## License
